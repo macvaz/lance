@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=2.0.1",
+    "fastapi>=0.115.0",
     "polars>=2.1.0",
     "pyarrow>=26.0.1",
     "pylance>=14.0.3",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [project.scripts]
@@ -18,6 +20,7 @@ query_polars = "queries.polars:main"
 query_duckdb = "queries.duckdb:main"
 drop_indexes = "lance_tools.drop_indexes:main"
 query_native = "queries.native:main"
+api = "api:main"
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -25,11 +28,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["constants"]
+py-modules = ["constants", "api"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["lance_tools*", "queries*"]
+include = ["lance_tools*", "queries*", "models*", "datasets*"]
 
 [dependency-groups]
 dev = [

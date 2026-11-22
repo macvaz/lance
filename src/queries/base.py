@@ -76,20 +76,7 @@ class QueryBase:
         for index, raw_value in zip(indexes, raw_values_list, strict=True):
             if not raw_value:
                 raise SystemExit(f"The value for '{index}' must not be empty")
-
-            value_format = COLUMN_VALUE_FORMATS.get(index)
-            if value_format == "date":
-                try:
-                    event_date = date.fromisoformat(raw_value)
-                except ValueError as error:
-                    raise SystemExit(f"Invalid {index} '{raw_value}'. Use YYYY-MM-DD format.") from error
-                column_values[index] = (event_date - date(1970, 1, 1)).days
-            elif value_format == "ipv4":
-                column_values[index] = self.parse_ipv4(raw_value)
-            elif value_format == "uint64":
-                column_values[index] = self.parse_uint64(raw_value, index)
-            else:
-                column_values[index] = self.parse_value(raw_value)
+            column_values[index] = self.parse_column_value(index, raw_value)
         return column_values
 
     def parse_fields(self, raw_value: str) -> list[str] | None:
@@ -176,3 +163,18 @@ class QueryBase:
 
     def get_lance_path(self, dataset_name: str) -> Path:
         return get_lance_dataset_path(dataset_name)
+
+    def parse_column_value(self, column: str, raw_value: str) -> object:
+        """Convert one human-readable value for Lance and Parquet queries."""
+        value_format = COLUMN_VALUE_FORMATS.get(column)
+        if value_format == "date":
+            try:
+                event_date = date.fromisoformat(raw_value)
+            except ValueError as error:
+                raise SystemExit(f"Invalid {column} '{raw_value}'. Use YYYY-MM-DD format.") from error
+            return (event_date - date(1970, 1, 1)).days
+        if value_format == "ipv4":
+            return self.parse_ipv4(raw_value)
+        if value_format == "uint64":
+            return self.parse_uint64(raw_value, column)
+        return self.parse_value(raw_value)

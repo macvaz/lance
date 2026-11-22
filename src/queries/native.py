@@ -17,24 +17,38 @@ from queries.base import QueryBase
 class NativeQuery(QueryBase):
     """Execute scalar lookups using Lance directly."""
 
+    def __init__(self) -> None:
+        self._datasets: dict[Path, Any] = {}
+
+    def get_dataset(self, dataset_path: Path):
+        """Open a Lance dataset once and reuse it for later executions."""
+        if dataset_path not in self._datasets:
+            self._datasets[dataset_path] = lance.dataset(dataset_path)
+        return self._datasets[dataset_path]
+
     def query_lance(
         self,
         dataset_path: Path,
         column_values: dict[str, object],
         indexes: list[str],
         fields: list[str] | None,
+        limit: int | None = None,
     ) -> tuple[Any, float]:
-        dataset = lance.dataset(dataset_path)
+        dataset = self.get_dataset(dataset_path)
         lance_filter = self.build_lance_filter(column_values)
         scanner_columns = None if fields is None else list(dict.fromkeys([*fields, *indexes]))
 
         started_at = time.perf_counter()
-        order_by: list[Any] = list(indexes)
-        scanner = (
-            dataset.scanner(filter=lance_filter, order_by=order_by)
-            if scanner_columns is None
-            else dataset.scanner(filter=lance_filter, columns=scanner_columns, order_by=order_by)
-        )
+        scanner_options: dict[str, Any] = {
+            "filter": lance_filter,
+            "order_by": list(indexes),
+        }
+        if scanner_columns is not None:
+            scanner_options["columns"] = scanner_columns
+        if limit is not None:
+            scanner_options["limit"] = limit
+
+        scanner = dataset.scanner(**scanner_options)
         table = scanner.to_table()
         if fields is not None:
             table = table.select(fields)

@@ -224,3 +224,24 @@ Projecting 4 columns instead of 105 substantially reduced data fetch and process
   - `duckdb.py`
   - `native.py`
 - `src/constants.py` contains shared dataset paths and column formats.
+
+## FastAPI Lance API
+
+The REST API exposes dataset discovery, Arrow schemas, and indexed Lance lookups.
+Install the project dependencies and start it with:
+
+```bash
+uv sync
+uv run api
+```
+
+Open the interactive docs at `http://127.0.0.1:8000/docs`.
+
+- `GET /health`
+- `GET /datasets`
+- `GET /datasets/{name}/schema`
+- `GET /datasets/{name}/query?indexes=UserID&values=15985305027620249815&fields=WatchID,EventDate&limit=100`
+
+Condition values use the same human-readable formats as the query commands:
+unsigned 64-bit integers, `YYYY-MM-DD` dates, dotted IPv4 addresses, and native
+integers, floating-point values, Booleans, or strings.
