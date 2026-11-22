@@ -78,6 +78,35 @@ uv run query_polars \
   --values "15985305027620249815"
 ```
 
+Compare Lance and Parquet lookups with DuckDB using the same arguments:
+
+```bash
+uv run query_duckdb \
+  --indexes UserID,EventDate,ClientIP,RegionID \
+  --values "15985305027620249815,2013-07-15,183.122.198.174,839" \
+  --fields WatchID,EventDate,ClientIP,RegionID
+```
+
+Explicitly choose the Lance or Parquet dataset:
+
+```bash
+uv run query_duckdb --lance hits
+uv run query_duckdb --parquet hits
+```
+
+For custom scalar columns and values:
+
+```bash
+uv run query_duckdb \
+  --indexes UserID,EventDate \
+  --values "15985305027620249815,2013-07-15" \
+  --fields WatchID,UserID,EventDate
+
+uv run query_duckdb \
+  --parquet hits \
+  --values "15985305027620249815"
+```
+
 Each query response includes the dataset path, execution time, row and column counts,
 estimated result memory size.
 
