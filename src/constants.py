@@ -8,7 +8,7 @@ DATASETS_DIR = PROJECT_ROOT / "datasets"
 DATASET_NAME = "hits"
 INDEX_COLUMN = "UserID"
 INDEX_VALUE = 15985305027620249815
-INDEX_COLUMNS = ["UserID", "EventDate", "ClientIP", "RegionID"]
+INDEX_COLUMNS = ["UserID", "EventDate"]
 
 COLUMN_VALUE_FORMATS = {
     "WatchID": "uint64",

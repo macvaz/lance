@@ -3,7 +3,7 @@
 The shared dataset configuration is in `src/constants.py`:
 
 - `DATASET_NAME` selects the default dataset name (`hits`).
-- `INDEX_COLUMNS` lists the default BTREE index columns (`UserID`, `EventDate`, `ClientIP`, `RegionID`).
+- `INDEX_COLUMNS` lists the configured BTREE index columns (`UserID`, `EventDate`, `ClientIP`, `RegionID`).
 - `get_parquet_dataset_path(name)` returns `datasets/<name>.parquet`.
 - `get_lance_dataset_path(name)` returns `datasets/<name>.lance`.
 
@@ -81,9 +81,9 @@ stored in Lance and Parquet. For example, `15985305027620249815` becomes
 
 ```bash
 uv run query_polars \
-  --indexes UserID,EventDate,ClientIP,RegionID \
-  --values "15985305027620249815,2013-07-15,183.122.198.174,839" \
-  --fields WatchID,EventDate,ClientIP,RegionID
+  --indexes UserID,EventDate \
+  --values "15985305027620249815,2013-07-15" \
+  --fields WatchID,EventDate
 ```
 
 The Polars command supports:
@@ -114,9 +114,9 @@ result sets and reports if their rows differ.
 
 ```bash
 uv run query_duckdb \
-  --indexes UserID,EventDate,ClientIP,RegionID \
-  --values "15985305027620249815,2013-07-15,183.122.198.174,839" \
-  --fields WatchID,EventDate,ClientIP,RegionID
+  --indexes UserID,EventDate \
+  --values "15985305027620249815,2013-07-15" \
+  --fields WatchID,EventDate
 ```
 
 The DuckDB command uses the same arguments and dataset selection behavior as
@@ -136,9 +136,9 @@ uv run query_duckdb \
 
 ```bash
 uv run query_native \
-  --indexes UserID,EventDate,ClientIP,RegionID \
-  --values "15985305027620249815,2013-07-15,183.122.198.174,839" \
-  --fields WatchID,EventDate,ClientIP,RegionID
+  --indexes UserID,EventDate \
+  --values "15985305027620249815,2013-07-15" \
+  --fields WatchID,EventDate
 ```
 
 `query_native` accepts `--lance [DATASET]`, `--indexes`, `--values`, and `--fields`,
@@ -168,15 +168,15 @@ returns every column.
 
 # Disk layout
 
-The current Lance dataset occupies approximately **28 GB**. Data files occupy
-approximately **23 GB**, while index directories account for the remaining storage.
+The current Lance dataset occupies approximately **24 GB**. Data files occupy
+approximately **23 GB**, while active index directories occupy approximately
+**1.07 GB**.
 
-| Component | Approximate size |
-|---|---:|
-| Total Lance dataset | 28 GB |
-| Data files | 23 GB |
-| All `_indices` directories | ~2.0 GB |
-| Active indexes | ~2.05 GB |
+| Component | Approximate size | Share of dataset |
+|---|---:|---:|
+| Total Lance dataset | 24 GB | 100% |
+| Data files | 23 GB | ~96% |
+| Active indexes | 1.07 GB | ~4% |
 
 Active BTREE indexes:
 
@@ -184,8 +184,6 @@ Active BTREE indexes:
 |---|---|---:|
 | `UserID_idx` | `UserID` | 651 MB |
 | `EventDate_idx` | `EventDate` | 443 MB |
-| `ClientIP_idx` | `ClientIP` | 503 MB |
-| `RegionID_idx` | `RegionID` | 449 MB |
 
 Only active index UUID directories remain under `_indices` after orphan cleanup.
 
@@ -237,11 +235,30 @@ uv run api
 
 Open the interactive docs at `http://127.0.0.1:8000/docs`.
 
+At startup, the API discovers every Lance dataset and prewarms all of its indexes
+before accepting requests. Startup warm-up status is available from `/health`.
+Restarting the API repeats the warm-up because Lance index memory is process-local.
+
 - `GET /health`
 - `GET /datasets`
 - `GET /datasets/{name}/schema`
 - `GET /datasets/{name}/query?indexes=UserID&values=15985305027620249815&fields=WatchID,EventDate&limit=100`
 
-Condition values use the same human-readable formats as the query commands:
-unsigned 64-bit integers, `YYYY-MM-DD` dates, dotted IPv4 addresses, and native
-integers, floating-point values, Booleans, or strings.
+Query by sending a `GET` request to the dataset query path:
+
+```bash
+curl -G 'http://127.0.0.1:8000/datasets/hits/query' \
+  --data-urlencode 'indexes=UserID,EventDate' \
+  --data-urlencode 'values=15985305027620249815,2013-07-15' \
+  --data-urlencode 'fields=WatchID,EventDate' \
+  --data-urlencode 'limit=100'
+```
+
+The query parameters are similar to the CLI tools:
+
+- `indexes`: comma-separated condition columns
+- `values`: comma-separated values in the same order as `indexes`
+- `fields`: comma-separated returned columns, or `*` for every column
+- `limit`: maximum number of rows to return
+
+By default, the response includes every column and up to 1,000 rows.

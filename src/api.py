@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
@@ -13,18 +14,40 @@ from queries.native import NativeQuery
 
 native_query = NativeQuery()
 dataset_manager = DatasetManager(native_query)
+startup_warmup: dict[str, Any] = {"status": "not_started", "datasets": []}
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Prewarm all Lance indexes before the API starts accepting requests."""
+    datasets: list[dict[str, Any]] = []
+
+    for dataset_name in dataset_manager.list_names():
+        path = dataset_manager.get_path(dataset_name)
+        warmed, elapsed = native_query.warm_up_indexes(path)
+        datasets.append(
+            {
+                "dataset": dataset_name,
+                "warmed_indexes": warmed,
+                "warm_up_time_ms": elapsed * 1000,
+            }
+        )
+
+    startup_warmup.update(status="completed", datasets=datasets)
+    yield
 
 
 api = FastAPI(
     title="Lance Dataset API",
     description="Schema discovery and indexed lookups for Lance datasets.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
 @api.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    return {"status": "ok", "warmup": startup_warmup}
 
 
 @api.get("/datasets")

@@ -63,6 +63,50 @@ class NativeQuery(QueryBase):
         print(f"Columns (Lance): {table.num_columns}", flush=True)
         print(f"Estimated data size (Lance): {self.format_bytes(table.nbytes)}", flush=True)
 
+    def warm_up_indexes(
+        self,
+        dataset_path: Path,
+        indexes: list[str] | None = None,
+    ) -> tuple[list[str], float]:
+        """Preload Lance scalar indexes into the Lance index cache."""
+        dataset = self.get_dataset(dataset_path)
+        available = dataset.list_indices()
+
+        if indexes:
+            requested = set(indexes)
+            selected = [
+                index
+                for index in available
+                if index["name"] in requested or any(field in requested for field in index["fields"])
+            ]
+            selected_names = {index["name"] for index in selected}
+            unknown = sorted(requested - {
+                item
+                for index in selected
+                for item in [index["name"], *index["fields"]]
+            })
+            if unknown:
+                raise ValueError(f"Unknown or unindexed columns: {', '.join(unknown)}")
+        else:
+            selected = available
+            selected_names = {index["name"] for index in selected}
+
+        started_at = time.perf_counter()
+        print(
+            f"Prewarming {len(selected)} Lance index(es) from {dataset_path}: "
+            + ", ".join(sorted(selected_names)),
+            flush=True,
+        )
+        for position, index in enumerate(selected, start=1):
+            print(
+                f"[{position}/{len(selected)}] Prewarming '{index['name']}'...",
+                flush=True,
+            )
+            dataset.prewarm_index(index["name"])
+        elapsed = time.perf_counter() - started_at
+
+        return sorted(selected_names), elapsed
+
     def main(self) -> None:
         args = self.build_parser().parse_args()
         indexes = self.parse_indexes(args.indexes)
