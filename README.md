@@ -84,6 +84,29 @@ estimated result memory size.
 Use `--fields` to control returned columns. It accepts a comma-separated field
 list and defaults to `*`, which returns every column.
 
+# Disk layout
+
+The current Lance dataset occupies approximately **28 GB**. Data files occupy
+approximately **23 GB**, while index directories account for the remaining storage.
+
+| Component | Approximate size |
+|---|---:|
+| Total Lance dataset | 28 GB |
+| Data files | 23 GB |
+| All `_indices` directories | ~2.0 GB |
+| Active indexes | ~2.05 GB |
+
+Active BTREE indexes:
+
+| Index | Column | Approximate size |
+|---|---|---:|
+| `UserID_idx` | `UserID` | 651 MB |
+| `EventDate_idx` | `EventDate` | 443 MB |
+| `ClientIP_idx` | `ClientIP` | 503 MB |
+| `RegionID_idx` | `RegionID` | 449 MB |
+
+Only active index UUID directories remain under `_indices` after orphan cleanup.
+
 # Performance
 
 ## Lookup performance
@@ -116,3 +139,6 @@ uv run drop_indexes
 uv run drop_indexes datasets/hits.lance --indices UserID EventDate
 uv run drop_indexes datasets/hits.lance --indices UserID_idx EventDate_idx
 ```
+
+Removing active indexes also deletes orphan `_indices` UUID directories that are no
+longer referenced by the Lance dataset.

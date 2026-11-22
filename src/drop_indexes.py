@@ -1,6 +1,7 @@
 """Remove indexes from a Lance dataset."""
 
 import argparse
+import shutil
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -40,6 +41,7 @@ def drop_indexes(
 
     if not requested_names:
         print("No Lance indexes found.", flush=True)
+        cleanup_stale_indexes(dataset_path, dataset)
         return dataset
 
     operation_started = time.perf_counter()
@@ -63,7 +65,40 @@ def drop_indexes(
 
     elapsed = time.perf_counter() - operation_started
     print(f"Index removal completed in {elapsed:.3f}s", flush=True)
+    cleanup_stale_indexes(dataset_path, dataset)
     return dataset
+
+
+def cleanup_stale_indexes(dataset_path: Path, dataset: lance.LanceDataset) -> list[str]:
+    """Remove orphan UUID directories under Lance _indices."""
+    indices_dir = dataset_path / "_indices"
+    if not indices_dir.is_dir():
+        print("No Lance index directory found.", flush=True)
+        return []
+
+    active_uuids = {item["uuid"] for item in dataset.list_indices()}
+    orphan_dirs = sorted(
+        directory
+        for directory in indices_dir.iterdir()
+        if directory.is_dir() and directory.name not in active_uuids
+    )
+
+    if not orphan_dirs:
+        print("No stale Lance index directories found.", flush=True)
+        return []
+
+    print(f"Removing {len(orphan_dirs)} stale Lance index directory/directories...", flush=True)
+    cleanup_started = time.perf_counter()
+    removed: list[str] = []
+
+    for position, directory in enumerate(orphan_dirs, start=1):
+        print(f"[{position}/{len(orphan_dirs)}] Removing '{directory.name}'...", flush=True)
+        shutil.rmtree(directory)
+        removed.append(directory.name)
+
+    elapsed = time.perf_counter() - cleanup_started
+    print(f"Stale index cleanup completed in {elapsed:.3f}s", flush=True)
+    return removed
 
 
 def build_parser() -> argparse.ArgumentParser:
