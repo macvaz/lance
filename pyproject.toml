@@ -1,7 +1,7 @@
 [project]
-name = "lance"
+name = "lance-benchmarks"
 version = "0.1.0"
-description = "Add your description here"
+description = "Testing random access performance of Lance datasets"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,11 +12,12 @@ dependencies = [
 ]
 
 [project.scripts]
-convert = "convert_to_lance:main"
-create_indexes = "create_indexes:main"
-query_polars = "query_polars:main"
-query_duckdb = "query_duckdb:main"
-drop_indexes = "drop_indexes:main"
+convert_from_parquet = "lance_tools.convert_from_parquet:main"
+create_indexes = "lance_tools.create_indexes:main"
+query_polars = "queries.polars:main"
+query_duckdb = "queries.duckdb:main"
+drop_indexes = "lance_tools.drop_indexes:main"
+query_native = "queries.native:main"
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -24,7 +25,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["constants", "convert_to_lance", "create_indexes", "drop_indexes", "query_polars", "query_duckdb"]
+py-modules = ["constants"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["lance_tools*", "queries*"]
 
 [dependency-groups]
 dev = [

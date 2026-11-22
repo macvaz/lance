@@ -1,33 +1,83 @@
-# Run
+# Lance tools
 
 The shared dataset configuration is in `src/constants.py`:
 
 - `DATASET_NAME` selects the default dataset name (`hits`).
-- `INDEX_COLUMNS` lists the columns indexed by default (`UserID`, `EventDate`, `ClientIP`, `RegionID`).
+- `INDEX_COLUMNS` lists the default BTREE index columns (`UserID`, `EventDate`, `ClientIP`, `RegionID`).
 - `get_parquet_dataset_path(name)` returns `datasets/<name>.parquet`.
 - `get_lance_dataset_path(name)` returns `datasets/<name>.lance`.
 
-Convert a Parquet dataset to Lance:
+## Convert Parquet to Lance
 
 ```bash
-uv run convert
+uv run convert_from_parquet
 ```
 
-Create BTREE indexes on a Lance dataset:
+`convert_from_parquet` accepts one optional positional source path. By default, it
+uses `datasets/hits.parquet` and creates `datasets/hits.lance`:
 
 ```bash
-uv run indexes
+uv run convert_from_parquet datasets/hits.parquet
 ```
 
-By default, this uses `DATASET_NAME` and `INDEX_COLUMNS`. The dataset and
-columns can be overridden with positional and named arguments:
+The conversion reports batch progress and writes the Lance dataset with 2,000,000
+maximum rows per data file and 32,768 maximum rows per row group.
+
+## Create Lance indexes
 
 ```bash
-uv run indexes --columns WatchID EventTime
+uv run create_indexes
 ```
 
-Compare Lance and Parquet lookups using comma-separated column names and one
-human-readable scalar value for each column. Conditions are combined with `AND`:
+`create_indexes` accepts an optional Lance dataset path and `--columns`:
+
+```bash
+uv run create_indexes datasets/hits.lance --columns WatchID EventTime
+```
+
+- Positional `dataset` defaults to `datasets/hits.lance`.
+- `--columns` accepts one or more column names separated by spaces.
+- Omitting `--columns` creates BTREE indexes for `UserID`, `EventDate`, `ClientIP`,
+  and `RegionID`.
+
+## Remove Lance indexes
+
+```bash
+uv run drop_indexes
+```
+
+`drop_indexes` accepts an optional Lance dataset path and `--indices`:
+
+```bash
+uv run drop_indexes datasets/hits.lance --indices UserID EventDate
+uv run drop_indexes datasets/hits.lance --indices UserID_idx EventDate_idx
+```
+
+- Positional `dataset` defaults to `datasets/hits.lance`.
+- `--indices` accepts index names or indexed column names.
+- Omitting `--indices` removes every active index.
+- After removal, the tool deletes orphaned UUID directories under `_indices` that
+  are no longer referenced by the Lance dataset.
+
+# Query tools
+
+All query commands share the same index, value, field, and value-format behavior.
+Each `--indexes` item is paired with the corresponding `--values` item by position,
+and conditions are combined with `AND`.
+
+Input formats:
+
+- `UserID`: unsigned 64-bit integer
+- `WatchID` and `RefererHash`/`URLHash`: unsigned 64-bit integer
+- `EventDate`: `YYYY-MM-DD`
+- `ClientIP`: dotted IPv4 address
+- Other columns: integer, floating-point, Boolean, or string inferred from the value
+
+The human-readable inputs are converted to the signed or encoded representations
+stored in Lance and Parquet. For example, `15985305027620249815` becomes
+`-2461439046089301801` for an Int64 `UserID` column.
+
+## Polars query
 
 ```bash
 uv run query_polars \
@@ -36,49 +86,31 @@ uv run query_polars \
   --fields WatchID,EventDate,ClientIP,RegionID
 ```
 
-Input formats:
+The Polars command supports:
 
-- `UserID`: unsigned 64-bit integer
-- `EventDate`: `YYYY-MM-DD`
-- `ClientIP`: dotted IPv4 address
-- `RegionID`: integer value
+- `--lance [DATASET]` to query a Lance dataset; defaults to `hits`.
+- `--parquet [DATASET]` to query a Parquet dataset; defaults to `hits`.
+- `--indexes INDEXES` for comma-separated condition columns.
+- `--values VALUES` for comma-separated values in the same order as `--indexes`.
+- `--fields FIELDS` for comma-separated returned columns, or `*` for every column.
 
-The number of items in `--values` must match the number of columns. Values are
-paired with columns by position.
-
-The script converts these human-readable values to the signed or encoded values
-stored in the dataset before applying equality filters.
-
-By default, query Lance using the `hits` dataset and `UserID = -2461439046089301801`:
+By default, it queries Lance using `hits` and `UserID = -2461439046089301801`:
 
 ```bash
 uv run query_polars
 ```
 
-Explicitly choose a Lance or Parquet dataset:
+Choose one dataset explicitly:
 
 ```bash
 uv run query_polars --lance hits
 uv run query_polars --parquet hits
 ```
 
-For custom scalar columns and values:
+If both `--lance` and `--parquet` are specified, Polars queries and compares both
+result sets and reports if their rows differ.
 
-```bash
-uv run query_polars \
-  --indexes UserID,EventDate \
-  --values "15985305027620249815,2013-07-15" \
-  --fields WatchID,UserID,EventDate
-
-uv run query_polars \
-  --values "15985305027620249815"
-
-uv run query_polars \
-  --parquet hits \
-  --values "15985305027620249815"
-```
-
-Compare Lance and Parquet lookups with DuckDB using the same arguments:
+## DuckDB query
 
 ```bash
 uv run query_duckdb \
@@ -87,31 +119,52 @@ uv run query_duckdb \
   --fields WatchID,EventDate,ClientIP,RegionID
 ```
 
-Explicitly choose the Lance or Parquet dataset:
+The DuckDB command uses the same arguments and dataset selection behavior as
+`query_polars`. For Lance, it uses native Lance filtering and DuckDB result
+ordering; for Parquet, it reads the dataset directly with DuckDB.
 
 ```bash
 uv run query_duckdb --lance hits
 uv run query_duckdb --parquet hits
-```
-
-For custom scalar columns and values:
-
-```bash
 uv run query_duckdb \
   --indexes UserID,EventDate \
   --values "15985305027620249815,2013-07-15" \
   --fields WatchID,UserID,EventDate
-
-uv run query_duckdb \
-  --parquet hits \
-  --values "15985305027620249815"
 ```
 
-Each query response includes the dataset path, execution time, row and column counts,
-estimated result memory size.
+## Native Lance query
 
-Use `--fields` to control returned columns. It accepts a comma-separated field
-list and defaults to `*`, which returns every column.
+```bash
+uv run query_native \
+  --indexes UserID,EventDate,ClientIP,RegionID \
+  --values "15985305027620249815,2013-07-15,183.122.198.174,839" \
+  --fields WatchID,EventDate,ClientIP,RegionID
+```
+
+`query_native` accepts `--lance [DATASET]`, `--indexes`, `--values`, and `--fields`,
+but it does not support querying Parquet or comparing two engines. It uses Lance
+scanners directly with Lance scalar-index filtering and native result ordering,
+without importing Polars or DuckDB.
+
+```bash
+uv run query_native --lance hits
+uv run query_native --indexes UserID --values "15985305027620249815"
+```
+
+## Query response
+
+Every query implementation reports:
+
+- The selected dataset path
+- Execution time
+- Output row count
+- Output column count
+- Estimated in-memory result size
+
+For Lance queries, the response also includes the generated Lance filter and
+`LanceRead`/`ScalarIndexQuery` plan metrics. Use `--fields` to control the projected
+result columns; it accepts a comma-separated field list and defaults to `*`, which
+returns every column.
 
 # Disk layout
 
@@ -145,6 +198,7 @@ Only active index UUID directories remain under `_indices` after orphan cleanup.
 | DuckDB on Parquet | Parallel scan of the full `WatchID` column (~800 MB) plus one row group | ~1.3 s |
 | Polars on Parquet | Same scan with additional processing | ~16 s |
 | Polars on Lance | BTREE index lookup | ~0.2 s |
+| Native Lance | BTREE index lookup | ~0.03 s |
 | DuckDB on Lance (Arrow scan) | BTREE index lookup with filter pushdown | ~0.03 s |
 
 ## Projection impact
@@ -158,16 +212,15 @@ Projecting 4 columns instead of 105 substantially reduced data fetch and process
 | Compute elapsed | 1.49 ms | 0.68 ms | ~2.2× faster |
 | Total elapsed | 2.49 ms | 1.23 ms | ~2× faster |
 
-Remove Lance indexes:
+# Source layout
 
-```bash
-# Remove every existing index
-uv run drop_indexes
-
-# Remove selected indexes by column name or index name
-uv run drop_indexes datasets/hits.lance --indices UserID EventDate
-uv run drop_indexes datasets/hits.lance --indices UserID_idx EventDate_idx
-```
-
-Removing active indexes also deletes orphan `_indices` UUID directories that are no
-longer referenced by the Lance dataset.
+- `src/lance_tools/` contains Lance-specific utilities:
+  - `convert_from_parquet.py`
+  - `create_indexes.py`
+  - `drop_indexes.py`
+- `src/queries/` contains engine-specific lookup implementations:
+  - `base.py`
+  - `polars.py`
+  - `duckdb.py`
+  - `native.py`
+- `src/constants.py` contains shared dataset paths and column formats.

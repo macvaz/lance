@@ -34,7 +34,7 @@ def iter_batches(parquet_file: pq.ParquetFile) -> Iterator[pa.RecordBatch]:
         yield batch
 
 
-def convert_to_lance(source: Path) -> lance.LanceDataset:
+def convert_from_parquet(source: Path) -> lance.LanceDataset:
     """Convert a Parquet file to a Lance dataset."""
     source = source.resolve()
     if not source.is_file():
@@ -74,7 +74,7 @@ def main() -> None:
     pa.set_cpu_count(2)
     pa.set_io_thread_count(2)
 
-    dataset = convert_to_lance(args.source)
+    dataset = convert_from_parquet(args.source)
     print(f"Created Lance dataset at {dataset.uri}")
 
 
