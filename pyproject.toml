@@ -10,3 +10,23 @@ dependencies = [
     "pyarrow>=26.0.1",
     "pylance>=14.0.3",
 ]
+
+[project.scripts]
+convert = "convert_to_lance:main"
+create_indexes = "create_indexes:main"
+query_polars = "query_polars:main"
+drop_indexes = "drop_indexes:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["constants", "convert_to_lance", "create_indexes", "drop_indexes", "query_polars"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.0.0",
+    "ipython>=9.0.0",
+]
