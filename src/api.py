@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -19,21 +20,28 @@ startup_warmup: dict[str, Any] = {"status": "not_started", "datasets": []}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Prewarm all Lance indexes before the API starts accepting requests."""
+    """Optionally prewarm Lance indexes before accepting requests."""
     datasets: list[dict[str, Any]] = []
+    prewarm_enabled = os.getenv("LANCE_API_PREWARM", "0").lower() in {"1", "true", "yes"}
 
-    for dataset_name in dataset_manager.list_names():
-        path = dataset_manager.get_path(dataset_name)
-        warmed, elapsed = native_query.warm_up_indexes(path)
-        datasets.append(
-            {
-                "dataset": dataset_name,
-                "warmed_indexes": warmed,
-                "warm_up_time_ms": elapsed * 1000,
-            }
+    if prewarm_enabled:
+        for dataset_name in dataset_manager.list_names():
+            path = dataset_manager.get_path(dataset_name)
+            warmed, elapsed = native_query.warm_up_indexes(path)
+            datasets.append(
+                {
+                    "dataset": dataset_name,
+                    "warmed_indexes": warmed,
+                    "warm_up_time_ms": elapsed * 1000,
+                }
+            )
+        startup_warmup.update(status="completed", datasets=datasets)
+    else:
+        startup_warmup.update(
+            status="disabled",
+            datasets=datasets,
+            reason="Set LANCE_API_PREWARM=1 to preload indexes at startup",
         )
-
-    startup_warmup.update(status="completed", datasets=datasets)
     yield
 
 
@@ -138,7 +146,7 @@ def query_dataset_get(
 
 
 def main() -> None:
-    uvicorn.run("api:api", host="127.0.0.1", port=8000)
+    uvicorn.run("api:api", host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":

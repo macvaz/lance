@@ -1,0 +1,37 @@
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: ["server", "-dir=/data", "-s3", "-filer", "-master.volumeSizeLimitMB=1024"]
+    ports:
+      - "9333:9333"
+      - "8888:8888"
+      - "8333:8333"
+      - "18080:18080"
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      LANCE_API_PREWARM: "${LANCE_API_PREWARM:-0}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-admin}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-adminadmin}"
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      AWS_ENDPOINT_URL_S3: "http://seaweedfs:8333"
+    volumes:
+      - ../datasets:/app/datasets
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+
+volumes:
+  seaweedfs-data:
